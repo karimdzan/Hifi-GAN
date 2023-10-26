@@ -22,10 +22,10 @@ class CTCCharTextEncoder(CharTextEncoder):
         self.ind2char = dict(enumerate(self.vocab))
         self.char2ind = {v: k for k, v in self.ind2char.items()}
         
-        # self.lm_decoder = build_ctcdecoder(
-        #     labels=[self.EMPTY_TOK] + list("".join(self.alphabet).upper()),
-        #     kenlm_model_path=path_to_lm
-        # )
+        self.lm_decoder = build_ctcdecoder(
+            labels=[self.EMPTY_TOK] + list("".join(self.alphabet).upper()),
+            kenlm_model_path=path_to_lm
+        )
         # if path_to_tokenizer is not None:
         #     self.tokenizer = Tokenizer.from_file(str(path_to_tokenizer))
         #     self.char2ind = self.tokenizer.get_vocab()
