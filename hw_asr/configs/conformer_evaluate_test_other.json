@@ -1,0 +1,40 @@
+{
+    "name": "balrog_evaluation",
+    "n_gpu": 1,
+    "preprocessing": {
+      "sr": 16000,
+      "spectrogram": {
+        "type": "MelSpectrogram",
+        "args": {
+        }
+      },
+      "log_spec": true
+    },
+    "text_encoder": {
+      "type": "CTCCharTextEncoder",
+      "args": {
+          "lm_path": "3-gram.arpa"
+      }    
+    },
+    "arch": {
+        "type": "Conformer",
+        "args": {
+          "dim": 128,
+          "num_layers": 12
+        }
+    },
+    "data": {
+      "test": {
+        "batch_size": 64,
+        "num_workers": 4,
+        "datasets": [
+          {
+            "type": "LibrispeechDataset",
+            "args": {
+              "part": "test-other"
+            }
+          }
+        ]
+      }
+    }
+}
