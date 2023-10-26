@@ -26,29 +26,6 @@ class CTCCharTextEncoder(CharTextEncoder):
             labels=[self.EMPTY_TOK] + list("".join(self.alphabet).upper()),
             kenlm_model_path=path_to_lm
         )
-        # if path_to_tokenizer is not None:
-        #     self.tokenizer = Tokenizer.from_file(str(path_to_tokenizer))
-        #     self.char2ind = self.tokenizer.get_vocab()
-        #     self.ind2char = {v: k.lower() for k, v in self.char2ind.items()}
-        #     self.vocab = [self.ind2char[ind] for ind in range(len(self.ind2char))]
-
-    # def encode(self, text):
-    #     """
-    #     Encoding of the text
-    #     :param text: text which will be encoded
-
-    #     Works for both BPE and usual alphabet
-    #     """
-    #     text = self.normalize_text(text, self.lng)
-    #     if self.tokenizer:
-    #         return Tensor(self.tokenizer.encode(text.upper()).ids).unsqueeze(0)
-    #     else:
-    #         try:
-    #             return Tensor([self.char2ind[char] for char in text]).unsqueeze(0)
-    #         except KeyError as e:
-    #             unknown_chars = set([char for char in text if char not in self.char2ind])
-    #             raise Exception(
-    #                 f"Can't encode text '{text}'. Unknown chars: '{' '.join(unknown_chars)}'")
             
 
     def ctc_decode(self, inds: List[int]) -> str:
