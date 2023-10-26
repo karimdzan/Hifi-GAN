@@ -61,7 +61,7 @@
   },
   "data": {
     "train": {
-      "batch_size": 20,
+      "batch_size": 64,
       "num_workers": 4,
       "datasets": [
         {
@@ -91,7 +91,7 @@
       ]
     },
     "val": {
-      "batch_size": 20,
+      "batch_size": 64,
       "num_workers": 4,
       "datasets": [
         {
@@ -142,13 +142,17 @@
     }
   ],
   "lr_scheduler": {
-    "type": "CosineAnnealingWarmRestarts",
+    "type": "OneCycleLR",
     "args": {
-      "T_0": 51
+      "steps_per_epoch": 500,
+      "epochs": 201,
+      "anneal_strategy": "cos",
+      "max_lr": 3e-4,
+      "pct_start": 0.2
     }
   },
   "trainer": {
-    "epochs": 100,
+    "epochs": 200,
     "save_dir": "saved/",
     "save_period": 10,
     "verbosity": 2,
@@ -157,7 +161,6 @@
     "visualize": "wandb",
     "wandb_project": "asr_project",
     "len_epoch": 500,
-    "grad_norm_clip": 10, 
-    "accum_grad": 3
+    "grad_norm_clip": 10 
   }
 }
