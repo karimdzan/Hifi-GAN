@@ -1,12 +1,64 @@
 # ASR project barebones
 
+## Description
+This repository contains a PyTorch implementation of the Conformer model for ASR task, trained and evaluated on LibriSpeech dataset. It is a homework for HSE Deep Learning in Audio course.
+
 ## Installation guide
 
-< Write your installation guide here >
+run.ipynb has nvidia gpu specifications as well as run results of train.py and test.py
+
+1. Run Docker
+```shell
+docker build -t asr .
+docker run -it asr
+```
+2. Install KenLM
+```shell
+pip install https://github.com/kpu/kenlm/archive/master.zip
+```
+3. Download LM
+```shell
+wget https://www.openslr.org/resources/11/3-gram.arpa.gz --no-check-certificate
+gzip -d 3-gram.arpa.gz
+```
+4. Download checkpoint
+```shell
+https://drive.google.com/file/d/1JxKT9CNtNBFKxNUf3gy9xymdtCRce-7-/view?usp=sharing
+```
+## Training
+```shell
+!python3 train.py --config hw_asr/configs/conformer.json
+```
+To resume training:
+```shell
+!python3 train.py -r path/to/checkpoint.pth
+```
+With config
+```shell
+!python3 train.py --config path/to/model/config.json -r path/to/model/checkpoint.pth
+```
+
+## Run tests
+```shell
+!python3 test.py \
+    --config hw_asr/configs/conformer_evaluate_test_clean.json \
+    --resume model_best.pth \
+    --batch-size 64 \
+    --jobs 4 \
+    --beam-size 200
+```
 
 ```shell
-pip install -r ./requirements.txt
+!python3 test.py \
+    --config hw_asr/configs/conformer_evaluate_test_other.json \
+    --resume model_best.pth \
+    --batch-size 64 \
+    --jobs 4 \
+    --beam-size 200
 ```
+
+## Author
+karim aitkhadzhaev
 
 ## Recommended implementation order
 
