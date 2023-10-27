@@ -13,7 +13,7 @@
     "text_encoder": {
       "type": "CTCCharTextEncoder",
       "args": {
-          "lm_path": "3-gram.arpa"
+          "path_to_lm": "3-gram.arpa"
       }    
     },
     "arch": {
