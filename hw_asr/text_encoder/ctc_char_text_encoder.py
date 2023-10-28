@@ -23,7 +23,7 @@ class CTCCharTextEncoder(CharTextEncoder):
         self.char2ind = {v: k for k, v in self.ind2char.items()}
         
         self.lm_decoder = build_ctcdecoder(
-            labels=[self.EMPTY_TOK] + list("".join(self.alphabet).upper()),
+            labels=[''] + list("".join(self.alphabet).upper()),
             kenlm_model_path=path_to_lm
         )
             
