@@ -16,14 +16,14 @@ docker run -it asr
 ```shell
 pip install https://github.com/kpu/kenlm/archive/master.zip
 ```
-3. Download LM
+3. Download LM(remove prefix if needed)
 ```shell
-wget https://www.openslr.org/resources/11/3-gram.arpa.gz --no-check-certificate
+wget https://www.openslr.org/resources/11/3-gram.arpa.gz --no-check-certificate --directory-prefix=/hw_asr/
 gzip -d 3-gram.arpa.gz
 ```
 4. Download checkpoint
 ```shell
-https://drive.google.com/file/d/1JxKT9CNtNBFKxNUf3gy9xymdtCRce-7-/view?usp=sharing
+https://drive.google.com/file/d/1irwUDg-44EvW41BGjmlgV8SUUJ5jRHx3/view?usp=sharing
 ```
 ## Training
 ```shell
