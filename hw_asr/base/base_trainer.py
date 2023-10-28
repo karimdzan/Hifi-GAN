@@ -2,6 +2,7 @@ from abc import abstractmethod
 
 import torch
 from numpy import inf
+from torch.optim.lr_scheduler import OneCycleLR
 
 from hw_asr.base import BaseModel
 from hw_asr.logger import get_visualizer
@@ -21,7 +22,7 @@ class BaseTrainer:
         self.criterion = criterion
         self.metrics = metrics
         self.optimizer = optimizer
-        self.lr_scheduler = None
+        self.lr_scheduler = config.init_obj(config["lr_scheduler"], torch.optim.lr_scheduler, optimizer)
         # for interrupt saving
         self._last_epoch = 0
 
@@ -79,7 +80,7 @@ class BaseTrainer:
         not_improved_count = 0
         for epoch in range(self.start_epoch, self.epochs + 1):
             self._last_epoch = epoch
-            result = self._train_epoch(epoch - 1)
+            result = self._train_epoch(epoch)
 
             # save logged informations into log dict
             log = {"epoch": epoch}
@@ -186,6 +187,17 @@ class BaseTrainer:
             )
         else:
             self.optimizer.load_state_dict(checkpoint["optimizer"])
+            #zato rabotaet...
+            self.lr_scheduler = OneCycleLR(
+                                self.optimizer,
+                                steps_per_epoch=500, 
+                                epochs=201, 
+                                anneal_strategy="cos", 
+                                max_lr=5e-4, 
+                                pct_start=0.2, 
+                                last_epoch=checkpoint["lr_scheduler"]["last_epoch"])
+            self.lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
+            self.optimizer.param_groups[0]['initial_lr'] = self.lr_scheduler.get_last_lr()[0]
 
         self.logger.info(
             "Checkpoint loaded. Resume training from epoch {}".format(self.start_epoch)
