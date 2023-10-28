@@ -17,7 +17,7 @@ from hw_asr.metric.utils import calc_wer, calc_cer
 DEFAULT_CHECKPOINT_PATH = ROOT_PATH / "default_test_model" / "checkpoint.pth"
 
 
-def main(config, out_file):
+def main(config, out_file, beam_size):
     logger = config.get_logger("test")
 
     # define cpu or gpu if possible
@@ -65,8 +65,8 @@ def main(config, out_file):
                 argmax = argmax[: int(batch["log_probs_length"][i])]
                 ground_truth_normalized = text_encoder.normalize_text(batch["text"][i])
                 text_argmax = text_encoder.ctc_decode(argmax.cpu().numpy())
-                text_beam_search = text_encoder.ctc_beam_search(
-                            batch["probs"][i], batch["log_probs_length"][i], beam_size=100
+                text_beam_search = text_encoder.ctc_lm_beam_search(
+                            batch["probs"][i], batch["log_probs_length"][i], beam_size=beam_size
                         )[:10]
                 
                 results.append(
@@ -192,4 +192,4 @@ if __name__ == "__main__":
     config["data"]["test"]["batch_size"] = args.batch_size
     config["data"]["test"]["n_jobs"] = args.jobs
 
-    main(config, args.output)
+    main(config, args.output, args.beam_size)
