@@ -19,20 +19,6 @@
             "min_gain_in_db": -10.0, 
             "max_gain_in_db":  5.0
           }
-        },
-        {
-          "type": "PitchShift", 
-          "args": {
-            "p": 0.2,
-            "sample_rate": 16000
-          }
-        },
-        {
-          "type": "PolarityInversion", 
-          "args": {
-            "p": 0.2,
-            "sample_rate": 16000
-          }
         }
     ],
     "spectrogram": [
@@ -116,7 +102,7 @@
   "optimizer": {
     "type": "Adam",
     "args": {
-      "lr": 3e-4,
+      "lr": 5e-4,
       "betas": [0.9, 0.98],
       "eps": 1e-9
     }
@@ -147,7 +133,7 @@
       "steps_per_epoch": 500,
       "epochs": 201,
       "anneal_strategy": "cos",
-      "max_lr": 3e-4,
+      "max_lr": 5e-4,
       "pct_start": 0.2
     }
   },
