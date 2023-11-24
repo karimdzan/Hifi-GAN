@@ -31,7 +31,7 @@ Make sure you run on Python version 3.8 or 3.9
 
 1. You can use [test.py](./test.py) to synthesize a speech from [test.txt](./test.txt):
     ```
-    python3 test.py --model data/download/data/cool_model/checkpoint_90000.pth.tar --text test.txt
+    python3 test.py --model data/download/data/cool_model/checkpoint_80000.pth.tar --text test.txt
     ```
     You can specify pitch, energy and duration parameters for audio control using same named arguments(--pitch etc., use --help function)
     The script above will create ./results folder that would store your synthesized audio.
