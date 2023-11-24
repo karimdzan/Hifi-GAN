@@ -7,8 +7,8 @@ class FastSpeechLoss(nn.Module):
         super().__init__()
         self.mse_loss = nn.MSELoss()
         self.l1_loss = nn.L1Loss()
-        self.max_log_pitch = torch.log1p(torch.tensor(model_config.max_pitch))
-        self.max_energy = model_config.max_energy
+        self.max_log_pitch = torch.log1p(torch.tensor(model_config.pitch_max))
+        self.max_energy = model_config.energy_max
         self.max_log_duration = torch.log1p(torch.tensor(model_config.max_duration))
 
     def forward(self, mel, 
@@ -26,7 +26,7 @@ class FastSpeechLoss(nn.Module):
                                                torch.log1p(duration_predictor_target.float()))
         
         pitch_loss = self.mse_loss(pitch_predicted, 
-                                   torch.log1p(pitch_predictor_target).float())
+                                   torch.log1p(pitch_predictor_target).float() / self.max_log_pitch)
         
         energy_loss = self.mse_loss(energy_predicted,
                                     torch.log1p(energy_predictor_target).float())

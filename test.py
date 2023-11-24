@@ -34,6 +34,9 @@ def parse_args():
     parser.add_argument("--save-path", 
                         default="./results/", 
                         help="path to save the speech")
+    parser.add_argument("--device", 
+                    default="cuda:0", 
+                    help="specify device")
     return parser.parse_args()
 
 
@@ -46,7 +49,7 @@ def main():
     model.load_state_dict(torch.load(args.checkpoint)["model"])
     model = model.to(args.device)
 
-    wave_glow = utils.get_WaveGlow(args.device).to(args.device)
+    wave_glow = utils.get_WaveGlow().to(args.device)
 
     texts = []
     if args.text is not None:
