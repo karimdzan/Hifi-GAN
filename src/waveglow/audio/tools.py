@@ -5,9 +5,9 @@ import numpy as np
 from scipy.io.wavfile import read
 from scipy.io.wavfile import write
 
-import waveglow.audio.stft as stft
-import waveglow.audio.hparams_audio as hparams
-from waveglow.audio.audio_processing import griffin_lim
+import src.waveglow.audio.stft as stft
+import src.waveglow.audio.hparams_audio as hparams
+from src.waveglow.audio.audio_processing import griffin_lim
 
 _stft = stft.TacotronSTFT(
     hparams.filter_length, hparams.hop_length, hparams.win_length,

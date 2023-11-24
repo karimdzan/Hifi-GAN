@@ -1,6 +1,6 @@
-from waveglow.audio.stft import TacotronSTFT
-from config import train_config, model_config, mel_config
-from data import process_text
+from src.waveglow.audio.stft import TacotronSTFT
+from src.config import train_config, model_config, mel_config
+from src.data import process_text
 from tqdm import tqdm
 import numpy as np
 import torch
@@ -19,7 +19,7 @@ def compute_energy(wav):
                         mel_fmin=0, 
                         mel_fmax=8000)
 
-    wav = wav.astype(torch.FloatTensor)
+    wav = torch.FloatTensor(wav)
     wav = torch.clip(wav.unsqueeze(0), -1, 1)
 
     audiograd = torch.autograd.Variable(wav, requires_grad=False)

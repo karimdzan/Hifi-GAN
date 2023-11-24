@@ -42,6 +42,7 @@ Make sure you run on Python version 3.8 or 3.9
     ```
     python3 train.py
     ```
+   You will need to specify your wandb login key.
 
 ## Repository Structure
 
