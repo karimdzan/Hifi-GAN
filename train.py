@@ -1,26 +1,29 @@
-from src.config import TrainConfig, FastSpeech2Config, MelSpectrogramConfig
+from src.config import train_config, generator_config, discriminator_config, mel_config
 from src.trainer import configure_training, train
 
-model_config = FastSpeech2Config()
-train_config = TrainConfig()
-mel_config = MelSpectrogramConfig()
 
-model, \
-    train_loader, \
-        fastspeech_loss, \
-            optimizer, \
-                scheduler, \
-                    wave_glow, \
-                         logger, \
-                             scaler = configure_training(model_config, 
-                                                   train_config, 
-                                                   mel_config)
-train(train_config, 
-      model, 
-      train_loader, 
-      fastspeech_loss, 
-      optimizer, 
-      scheduler, 
-      wave_glow,
+generator, \
+    mpd, msd, \
+        generator_opt, \
+            discriminator_opt, \
+                generator_scheduler, \
+                    discriminator_scheduler, \
+                        dataloader, \
+                          dataset, \
+                             logger, \
+                                 generator_scaler, \
+                                 discriminator_scaler = configure_training(train_config, 
+                                                        generator_config, 
+                                                        discriminator_config, 
+                                                        mel_config)
+train(generator, 
+      mpd, msd, 
+      generator_opt, 
+      discriminator_opt, 
+      generator_scheduler, 
+      discriminator_scheduler, 
+      dataloader,
+      dataset,
       logger,
-      scaler)
+      generator_scaler,
+      discriminator_scaler)

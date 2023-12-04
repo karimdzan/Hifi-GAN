@@ -1,90 +1,90 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import torch
+from typing import List, Tuple
 
 
 @dataclass
 class MelSpectrogramConfig:
-    num_mels = 80
+    sr: int = 22050
+    win_length: int = 1024
+    hop_length: int = 256
+    n_fft: int = 1024
+    f_min: int = 0
+    f_max: int = 8000
+    n_mels: int = 80
+    power: float = 1.0
+
+    # value of melspectrograms if we fed a silence into `MelSpectrogram`
+    pad_value: float = -11.5129251
 
 
 @dataclass
-class FastSpeech2Config:
-    vocab_size = 300
-    max_seq_len = 3000
+class GeneratorConfig:
+    upsampling_strides: Tuple[int] = (8, 8, 2, 2)
+    upsampling_kernels: Tuple[int] = (16, 16, 4, 4)
+    upsampling_hidden_dim: int = 512
 
-    pitch_vocab = 256
-    energy_vocab = 256
-    
-    pitch_max = 862
-    pitch_min = 0
-    energy_max = 314
-    energy_min = 0
-    max_duration = 74
+    mrf_dilations: List[List[List[int]]] = field(default_factory=lambda: [[[1, 1], [3, 1], [5, 1]]] * 3)
+    mrf_kernel_sizes: Tuple[int] = (3, 7, 11)
 
-    encoder_dim = 256
-    encoder_n_layer = 4
-    encoder_head = 2
-    encoder_conv1d_filter_size = 1024
+    pre_post_kernel_size: int = 7
 
-    decoder_dim = 256
-    decoder_n_layer = 4
-    decoder_head = 2
-    decoder_conv1d_filter_size = 1024
+    mel_dimension: int = 80
 
-    fft_conv1d_kernel = [9, 1]
-    fft_conv1d_padding = [4, 0]
+    leaky_relu_slope: float = 0.1
 
-    filter_length = 1024
-    win_length = 1024
-    
-    duration_predictor_filter_size = 256
-    duration_predictor_kernel_size = 3
-    dropout = 0.1
-    
-    PAD = 0
-    UNK = 1
-    BOS = 2
-    EOS = 3
 
-    PAD_WORD = ''
-    UNK_WORD = ''
-    BOS_WORD = ''
-    EOS_WORD = ''
+@dataclass
+class DiscriminatorConfig:
+    leaky_relu_slope: float = 0.1
+    mpd_kernel_size: int = 5
+    mpd_stride: int = 3
+    mpd_n_blocks: int = 4
+    mpd_post_conv_kernel_size: int = 3
+    mpd_periods: Tuple[int] = (2, 3, 5, 7, 11)
+
+    msd_channels: Tuple[int] = (1, 128, 128, 256, 512, 1024, 1024, 1024, 1)
+    msd_kernel_sizes: Tuple[int] = (15, 41, 41, 41, 41, 41, 5, 3)
+    msd_strides: Tuple[int] = (1, 2, 2, 4, 4, 1, 1, 1)
+    msd_paddings: Tuple[int] = (7, 20, 20, 20, 20, 20, 2, 1)
+    msd_groups: Tuple[int] = (1, 4, 16, 16, 16, 16, 1, 1)
+
+    pool_kernel: int = 4
+    pool_stride: int = 2
+    pool_padding: int = 2
 
 
 @dataclass
 class TrainConfig:
-    checkpoint_path = "./data/fastspeech2_checkpoints"
-    logger_path = "./data/logger"
-    mel_ground_truth = "./data/mels"
-    alignment_path = "./data/alignments"
-    data_path = './data/train.txt'
-    pitch_path = './data/pitch'
-    energy_path = './data/energy'
-    wav_path = './data/LJSpeech-1.1/wavs'
-    
-    wandb_project = 'hw_tts'
-    
-    text_cleaners = ['english_cleaners']
+    train_path: str = "./data/LJSpeech-1.1"
+    wav_path: str = "./data/test"
+    logs_path: str = "./results"
 
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    frame_len: int = 8192 * 2 #remove *2 if it fails
+    device: str = "cuda"
+    seed: int = 42
 
-    batch_size = 64
-    epochs = 2000
-    n_warm_up_step = 4000
+    adam_betas: Tuple[float] = (0.8, 0.99)
+    lr_decay: float = 0.999
+    generator_lr: float = 0.0002
+    discriminator_lr: float = 0.0002
+    batch_size: float = 32
 
-    learning_rate = 1e-3
-    weight_decay = 1e-6
-    grad_clip_thresh = 1.0
-    decay_step = [500000, 1000000, 2000000]
+    l1_gamma: float = 45.
+    gan_gamma: float = 1.
+    fm_gamma: float = 2.
 
-    save_step = 5000
-    log_step = 10
-    clear_Time = 20
+    epochs: int = 500
+    log_steps: int = 10
+    save_steps: int = 1000
 
-    batch_expand_size = 32
+    wandb_project: str = "HiFi-GAN"
+
+    max_wav_value: float = 32768.0
+    sample_rate: int = 22050
 
 
 mel_config = MelSpectrogramConfig()
-model_config = FastSpeech2Config()
+generator_config = GeneratorConfig()
+discriminator_config = DiscriminatorConfig()
 train_config = TrainConfig()

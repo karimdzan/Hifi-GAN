@@ -1,1 +1,2 @@
-from src.model.fastspeech import FastSpeech
+from src.model.generator import Generator
+from src.model.discriminator import MultiScaleDiscriminator, MultiPeriodDiscriminator

@@ -1,177 +1,205 @@
-from torch.utils.data import DataLoader
-from torch.optim.lr_scheduler  import OneCycleLR
-from torch import nn
+import torch.nn.functional as F
 import torch
 from tqdm import tqdm
 import os
-from src.data import get_data_to_buffer, BufferDataset, collate_fn_tensor
 from src.wandb_writer import WanDBWriter
-from src.model.fastspeech import FastSpeech
-from src.waveglow import utils as waveglow_utils
-from src.trainer import utils as trainer_utils
-from src.loss import FastSpeechLoss
-from functools import partial
 import gc
 from torch.cuda.amp import GradScaler
 from torch import autocast
+from src.config import train_config
+from src.data import MelWavDataset
+from src.model import Generator, MultiPeriodDiscriminator, MultiScaleDiscriminator
+from src.loss import discriminator_loss, generator_loss, feature_loss
+from src.trainer.inference import inference
+from src.trainer.utils import init_torch_seeds
+import itertools
 
 
-def configure_training(model_config, train_config, mel_config):
-    model = FastSpeech(model_config, mel_config)
-    model = model.to(train_config.device)
+@torch.no_grad()
+def get_grad_norm(model, norm_type=2):
+    parameters = model.parameters()
+    if isinstance(parameters, torch.Tensor):
+        parameters = [parameters]
+    parameters = [p for p in parameters if p.grad is not None]
+    total_norm = torch.norm(
+        torch.stack(
+            [torch.norm(p.grad.detach(), norm_type).cpu() for p in parameters]
+        ),
+        norm_type,
+    )
+    return total_norm.item()
 
-    os.makedirs(train_config.checkpoint_path, exist_ok=True)
+def collate(samples):
+    return torch.cat([s[0] for s in samples], 0), torch.cat([s[1] for s in samples], 0)
 
-    fastspeech_loss = FastSpeechLoss(model_config=model_config)
+def configure_training(train_config,  
+                       generator_config, 
+                       discriminator_config,
+                       mel_config):
+    
+    init_torch_seeds(train_config.seed)
+    os.makedirs(train_config.logs_path, exist_ok=True)
 
-    optimizer = torch.optim.AdamW(
-        model.parameters(),
-        lr=train_config.learning_rate,
-        betas=(0.9, 0.98),
-        eps=1e-9)
+    dataset = MelWavDataset(train_config, mel_config)
 
-    scaler = GradScaler()
+    generator = Generator(generator_config).to(train_config.device)
+    mpd = MultiPeriodDiscriminator(discriminator_config).to(train_config.device)
+    msd = MultiScaleDiscriminator(discriminator_config).to(train_config.device)
+    generator.train()
+    mpd.train()
+    msd.train()
+    generator.count_params()
+    mpd.count_params()
+    msd.count_params()
 
-    buffer = get_data_to_buffer(train_config)
-    dataset = BufferDataset(buffer)
-    train_loader = DataLoader(
-        dataset,
-        batch_size=train_config.batch_expand_size * train_config.batch_size,
+    generator_opt = torch.optim.AdamW(generator.parameters(), lr=train_config.generator_lr, 
+                                      betas=train_config.adam_betas)
+    discriminator_opt = torch.optim.AdamW(itertools.chain(msd.parameters(), mpd.parameters()), 
+                                          train_config.discriminator_lr, betas=train_config.adam_betas)
+
+    generator_scheduler = torch.optim.lr_scheduler.ExponentialLR(generator_opt, train_config.lr_decay)
+    discriminator_scheduler = torch.optim.lr_scheduler.ExponentialLR(discriminator_opt, train_config.lr_decay)
+
+    dataloader = torch.utils.data.DataLoader(
+        dataset=dataset, 
+        batch_size=train_config.batch_size,
         shuffle=True,
-        collate_fn=partial(collate_fn_tensor, batch_expand_size=train_config.batch_expand_size),
-        drop_last=True,
-        num_workers=0
+        collate_fn=collate
     )
 
-    scheduler = OneCycleLR(optimizer, **{
-        "steps_per_epoch": len(train_loader) * train_config.batch_expand_size,
-        "epochs": train_config.epochs,
-        "anneal_strategy": "cos",
-        "max_lr": train_config.learning_rate,
-        "pct_start": 0.1
-    })
-
-    wave_glow = waveglow_utils.get_WaveGlow()
-
-    for path in os.listdir("."):
-        if path.endswith(".patch"):
-            os.remove(path)
-
-    wave_glow = wave_glow.to(train_config.device)
-    
     logger = WanDBWriter(train_config)
 
-    return model, train_loader, fastspeech_loss, optimizer, scheduler, wave_glow, logger, scaler
+    generator_scaler = GradScaler()
+    discriminator_scaler = GradScaler()
+
+    return generator, \
+        mpd, msd, \
+            generator_opt, \
+                discriminator_opt, \
+                    generator_scheduler, \
+                        discriminator_scheduler, \
+                            dataloader, \
+                                dataset, \
+                                    logger, \
+                                        generator_scaler, \
+                                        discriminator_scaler
 
 
-def train(train_config, 
-          model, 
-          train_loader, 
-          fastspeech_loss, 
-          optimizer, 
-          scheduler,
-          wave_glow,
+
+def train(generator, 
+          mpd, msd, 
+          generator_opt, 
+          discriminator_opt, 
+          generator_scheduler, 
+          discriminator_scheduler, 
+          dataloader, 
+          dataset, 
           logger, 
-          scaler
+          generator_scaler, 
+          discriminator_scaler
           ):
+    
+    init_torch_seeds(train_config.seed)
 
-    current_step = 0
+    pbar = tqdm(total=train_config.epochs * len(dataloader))
 
-    tqdm_bar = tqdm(total=train_config.epochs * len(train_loader) * train_config.batch_expand_size)
+    steps = 0
 
-    prepared_texts = trainer_utils.prepare_texts(trainer_utils.get_data(), 
-                                                 train_config.text_cleaners, 
-                                                 device=train_config.device)
-
-    t_l = m_l = d_l = p_l = e_l = 0.
-
+    total_disc_loss = total_gen_mel_loss = total_gen_gan_loss = total_gen_fm_loss = total_gen_full_loss = 0.
     try:
         for epoch in range(train_config.epochs):
-            for i, batchs in enumerate(train_loader):
-                # real batch start here
-                for j, db in enumerate(batchs):
-                    current_step += 1
-                    tqdm_bar.update(1)
-                    logger.set_step(current_step)
-
-                    # Get Data
-                    character = db["text"].long().to(train_config.device)
-                    mel_target = db["mel_target"].float().to(train_config.device)
-                    duration = db["duration"].int().to(train_config.device)
-                    pitch = db["pitch"].float().to(train_config.device)
-                    energy = db["energy"].float().to(train_config.device)
-                    mel_pos = db["mel_pos"].long().to(train_config.device)
-                    src_pos = db["src_pos"].long().to(train_config.device)
-                    max_mel_len = db["mel_max_len"]
-
-                    # Forward
-                    with autocast(device_type='cuda', dtype=torch.float16):
-                        mel_output, \
-                        duration_predictor_output, \
-                        pitch_predictor_output, \
-                        energy_predictor_output = model(character,
-                                                        src_pos,
-                                                        mel_pos=mel_pos,
-                                                        mel_max_length=max_mel_len,
-                                                        length_target=duration,
-                                                        pitch_target=pitch,
-                                                        energy_target=energy)
-
-                        # Calc Loss
-                        mel_loss, duration_loss, pitch_loss, energy_loss = \
-                            fastspeech_loss(mel_output,
-                                            duration_predictor_output,
-                                            pitch_predictor_output,
-                                            energy_predictor_output,
-                                            mel_target,
-                                            duration,
-                                            pitch,
-                                            energy)
-
-                        total_loss = mel_loss + duration_loss + pitch_loss + energy_loss
-
-                    # Logger
-                    t_l += total_loss.detach().cpu().numpy()
-                    m_l += mel_loss.detach().cpu().numpy()
-                    d_l += duration_loss.detach().cpu().numpy()
-                    p_l += pitch_loss.detach().cpu().numpy()
-                    e_l += energy_loss.detach().cpu().numpy()
-
-                    if current_step % train_config.log_step == 0:
-                        logger.add_scalar("duration_loss", d_l / train_config.log_step)
-                        logger.add_scalar("mel_loss", m_l / train_config.log_step)
-                        logger.add_scalar("pitch_loss", p_l / train_config.log_step)
-                        logger.add_scalar("energy_loss", e_l / train_config.log_step)
-                        logger.add_scalar("total_loss", t_l / train_config.log_step)
-                        t_l = m_l = d_l = p_l = e_l = 0.
-                        
-                    # Backward
-                    scaler.scale(total_loss).backward()
-
-                    # Clipping gradients to avoid gradient explosion
-                    nn.utils.clip_grad_norm_(
-                        model.parameters(), train_config.grad_clip_thresh)
+            for real_wav, real_mel in dataloader:
+                steps += 1
+                logger.set_step(steps)
+                with autocast(device_type='cuda', dtype=torch.float16):
+                    pred_wav = generator(real_mel)
+                    pred_mel = dataset.melspec_with_pad(pred_wav)
                     
-                    scaler.step(optimizer)
-                    scaler.update()
-                    optimizer.zero_grad(set_to_none=True)
-                    scheduler.step()
-                    
-                    torch.cuda.empty_cache()
-                    gc.collect()
+                    discriminator_opt.zero_grad()
+                    y_rs, y_gs, _, _ = mpd(real_wav, pred_wav.detach())
+                    loss_disc_f = discriminator_loss(y_rs, y_gs)
 
-                    if current_step % train_config.save_step == 0:
-                        os.makedirs(train_config.checkpoint_path, exist_ok=True)
-                        torch.save({'model': model.state_dict(), 
-                                    'optimizer': optimizer.state_dict()}, 
-                                    os.path.join(train_config.checkpoint_path, 
-                                                 'checkpoint_%d.pth.tar' % current_step))
-                        table = trainer_utils.create_logging_table(model, wave_glow, prepared_texts, current_step, train_config.device)
-                        logger.wandb.log({"examples": table})
-                        
-                        print("save model at step %d ..." % current_step)
+                    y_rs, y_gs, _, _ = msd(real_wav, pred_wav.detach())
+                    loss_disc_s = discriminator_loss(y_rs, y_gs)
 
+                    loss_disc_all = loss_disc_s + loss_disc_f
+
+                # loss_disc_all.backward()
+                # discriminator_opt.step()
+                discriminator_opt.zero_grad()
+                discriminator_scaler.scale(loss_disc_all).backward()
+                if steps % train_config.log_steps == 0:
+                    logger.add_scalar("grad_norm_msd", get_grad_norm(msd))
+                    logger.add_scalar("grad_norm_mpd", get_grad_norm(mpd))
+                discriminator_scaler.step(discriminator_opt)
+                discriminator_scaler.update()
+
+                with autocast(device_type='cuda', dtype=torch.float16):
+                    generator_opt.zero_grad()
+
+                    loss_mel = F.l1_loss(real_mel, pred_mel) * 45
+
+                    _, y_gs, fmap_rs, fmap_gs = mpd(real_wav, pred_wav)
+                    _, y_hat_gs, fmap_s_rs, fmap_s_gs = msd(real_wav, pred_wav)
+
+                    loss_fm_f = feature_loss(fmap_rs, fmap_gs) * 2
+                    loss_fm_s = feature_loss(fmap_s_rs, fmap_s_gs) * 2
+
+                    loss_gen_f = generator_loss(y_gs)
+                    loss_gen_s = generator_loss(y_hat_gs)
+                    loss_gen_all = loss_gen_s + loss_gen_f + loss_fm_s + loss_fm_f + loss_mel
+
+                # loss_gen_all.backward()
+                # generator_opt.step()
+
+                generator_opt.zero_grad()
+                generator_scaler.scale(loss_gen_all).backward()
+                if steps % train_config.log_steps == 0:
+                    logger.add_scalar("grad_norm_gen", get_grad_norm(generator))
+                generator_scaler.step(generator_opt)
+                generator_scaler.update()
+
+                total_disc_loss += loss_disc_all.item() / train_config.log_steps
+                total_gen_mel_loss += loss_mel.item() / train_config.log_steps
+                total_gen_gan_loss += (loss_disc_s + loss_gen_f).item() / train_config.log_steps
+                total_gen_fm_loss += (loss_fm_f + loss_fm_s).item() / train_config.log_steps
+                total_gen_full_loss += loss_gen_all.item() / train_config.log_steps
+
+                torch.cuda.empty_cache()
+                gc.collect()
+
+                if steps % train_config.log_steps == 0:
+                    logger.add_scalar("discriminator_loss", total_disc_loss)
+                    logger.add_scalar("generator_mel_loss", total_gen_mel_loss)
+                    logger.add_scalar("generator_gan_loss", total_gen_gan_loss)
+                    logger.add_scalar("generator_feature_matching_loss", total_gen_fm_loss)
+                    logger.add_scalar("generator_loss", total_gen_full_loss)
+                    total_disc_loss = total_gen_mel_loss = total_gen_gan_loss = total_gen_fm_loss = total_gen_full_loss = 0.
+
+                if steps % train_config.save_steps == 0:
+                    save_path = os.path.join(train_config.logs_path, 'checkpoint_%d.pth' % steps)
+                    torch.save({
+                        'generator': generator.state_dict(), 
+                        'mpd': mpd.state_dict(),
+                        'msd': msd.state_dict(),
+                        'step': steps
+                        }, save_path
+                    )
+
+                    logger.add_image('True Mel', real_mel[0].detach().cpu().numpy().T)
+                    logger.add_image('Pred Mel', pred_mel[0].detach().cpu().numpy().T)
+
+                    inference(
+                        save_path, dataset.melspec_with_pad, train_config.wav_path, train_config.max_wav_value,
+                        steps, train_config.device, train_config.sample_rate
+                    )
+                
+                pbar.update(1)
+
+                discriminator_scheduler.step()
+                generator_scheduler.step()
+
+        pbar.finish()
+    
     except KeyboardInterrupt:
         logger.wandb.finish()
-
-    return model

@@ -1,34 +1,24 @@
 import torch
-import torch.nn as nn
-    
 
-class FastSpeechLoss(nn.Module):
-    def __init__(self, model_config):
-        super().__init__()
-        self.mse_loss = nn.MSELoss()
-        self.l1_loss = nn.L1Loss()
-        self.max_log_pitch = torch.log1p(torch.tensor(model_config.pitch_max))
-        self.max_energy = model_config.energy_max
-        self.max_log_duration = torch.log1p(torch.tensor(model_config.max_duration))
+def feature_loss(fmap_r, fmap_g):
+    loss = 0.
+    for dr, dg in zip(fmap_r, fmap_g):
+        for rl, gl in zip(dr, dg):
+            loss += torch.mean(torch.abs(rl - gl))
+    return loss
 
-    def forward(self, mel, 
-                      duration_predicted, 
-                      pitch_predicted, 
-                      energy_predicted, 
-                      mel_target, 
-                      duration_predictor_target, 
-                      pitch_predictor_target, 
-                      energy_predictor_target):
 
-        mel_loss = self.l1_loss(mel, mel_target)
+def discriminator_loss(disc_real_outputs, disc_fake_outputs):
+    loss = 0.
+    for dr, dg in zip(disc_real_outputs, disc_fake_outputs):
+        r_loss = torch.mean((1 - dr) ** 2)
+        g_loss = torch.mean(dg ** 2)
+        loss += r_loss + g_loss
+    return loss
 
-        duration_predictor_loss = self.mse_loss(duration_predicted,
-                                               torch.log1p(duration_predictor_target.float()))
-        
-        pitch_loss = self.mse_loss(pitch_predicted, 
-                                   torch.log1p(pitch_predictor_target).float() / self.max_log_pitch)
-        
-        energy_loss = self.mse_loss(energy_predicted,
-                                    torch.log1p(energy_predictor_target).float())
-        
-        return mel_loss, duration_predictor_loss, pitch_loss, energy_loss
+
+def generator_loss(disc_outputs):
+    loss = 0.
+    for dg in disc_outputs:
+        loss += torch.mean((1 - dg) ** 2)
+    return loss
