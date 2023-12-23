@@ -17,7 +17,7 @@ def init_weights(module, mean=0., std=1e-2):
 class ResBlock(torch.nn.Module):
     def __init__(self, n_channels: int, dilations: List[List[int]], kernel_size: int, leaky_relu_slope: float):
         super().__init__()
-        self.conv_blocks = torch.nn.ModuleList()
+        self.blocks = torch.nn.ModuleList()
         self.leaky_relu_slope = leaky_relu_slope
         for continual_dilations in dilations:
             layers = torch.nn.ModuleList()
@@ -32,8 +32,8 @@ class ResBlock(torch.nn.Module):
                             padding=dilation2padding(kernel_size, dilation)
                     ))
                 )
-            self.conv_blocks.append(layers)
-        self.conv_blocks.apply(init_weights)
+            self.blocks.append(layers)
+        self.blocks.apply(init_weights)
 
     def forward(self, x):
         for block in self.blocks:
@@ -61,7 +61,7 @@ class MRFLayer(torch.nn.Module):
                     n_channels=n_channels,
                     dilations=dilations,
                     kernel_size=kernel_size,
-                    lrelu_slope=config.leaky_relu_slope
+                    leaky_relu_slope=config.leaky_relu_slope
                 )
             )
 
