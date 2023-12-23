@@ -40,19 +40,20 @@ def main():
     dataset = MelWavDataset(train_config, mel_config)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     generator = Generator(GeneratorConfig()).to(device)
+    print(generator)
     generator.load_state_dict(torch.load(args.checkpoint)["generator"])
     generator.eval()
     generator.remove_weight_norm()
-    for file in os.listdir(args.data):
+    for data_file in os.listdir(args.data):
         if args.type == 'audio':
-            wav = torchaudio.load(os.path.join(args.data, file))[0]
+            wav = torchaudio.load(os.path.join(args.data, data_file))[0]
             mel = dataset.melspec_with_pad(wav.to(device))
-            wav_gen = generator(mel).squeeze(0).detach().cpu()
-            write(os.path.join(args.output, file.replace(".pt", ".wav")), 22050, wav_gen)
+            wav_gen = generator(mel).squeeze(0).detach().cpu().numpy()
+            write(os.path.join(args.output, data_file), 22050, wav_gen)
         else:
-            mel = torch.load(os.path.join(args.data, file)).unsqueeze(0).to(device)
+            mel = torch.load(os.path.join(args.data, data_file)).unsqueeze(0).to(device)
             wav = generator(mel).squeeze(0).detach().cpu().numpy()
-            write(os.path.join(args.output, file.replace(".pt", ".wav")), 22050, wav)
+            write(os.path.join(args.output, data_file.replace(".pt", ".wav")), 22050, wav)
 
 if __name__ == "__main__":
     main()
